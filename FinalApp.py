@@ -68,10 +68,10 @@ def main():
     
     if option.startswith('1.'):
         query = "SELECT Video_Data_One.Video_Name, Channel_Five.Channel_Name FROM Video_Data_One JOIN Channel_Five ON Video_Data_One.Channel_ID = Channel_Five.Channel_ID"
-        column_names=['Video_Name,Channel_name']
+        column_names=['Video_Name','Channel_name']
     elif option.startswith('2.'):
         query = "SELECT Channel_Name, VideoCount FROM Channel_Five ORDER BY VideoCount DESC LIMIT 5"
-        column_names=['Channel_Name,Video_Count']
+        column_names=['Channel_Name','Video_Count']
     elif option.startswith('3.'):
         query = "SELECT Video_Data_One.Video_Name, Video_Data_One.ViewCount,Channel_Five.Channel_Name  FROM Video_Data_One JOIN Channel_Five ON Video_Data_One.Channel_ID = Channel_Five.Channel_ID ORDER BY Video_Data_One.ViewCount DESC LIMIT 10"
         column_names=['Video_Name','ViewCount','Channel_Name']
