@@ -1,5 +1,5 @@
 # Project_ONEnew
-FinalTABLES.ipynb file contains code to create the table
+FinalTABLES.py file contains code to create the table
 video_data_one table:
 
 Database Connection: The code establishes a connection to a MySQL database named 'YoutubeDataHarvesting' running on the localhost using the credentials provided.
