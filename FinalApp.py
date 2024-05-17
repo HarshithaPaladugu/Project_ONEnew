@@ -22,7 +22,7 @@ def main():
 
     # Streamlit layout
     st.title("YouTube Data Harvesting")
-    user_input = st.selectbox( 'Select an option',
+    user_input = st.selectbox( 'Select one of the following YouTube Option',
         ('UC8N84h1aPhwI5IT8jPh_u9Q',
                               'UCgsyJ5oeftrhdnpUIqsfexw',
                               'UCH86ITmgOsa8amIFhGCgcTQ',
