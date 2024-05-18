@@ -2,11 +2,12 @@ import streamlit as st
 import mysql.connector
 import pandas as pd
 from googleapiclient.discovery import build
-from isodate import parse_duration
 
+# Initialize YouTube API connection
+youtube = None
 
-# Database connection function
-def connect_to_database():
+# Function to establish a database connection
+def get_db_connection():
     return mysql.connector.connect(
         host='localhost',
         user='root',
@@ -14,32 +15,75 @@ def connect_to_database():
         database='YoutubeDataHarvesting'
     )
 
+# Function to get channel details from YouTube API
+def get_channel_details(channel_id):
+    request = youtube.channels().list(
+        part="snippet,contentDetails,statistics",
+        id=channel_id
+    )
+    result = request.execute()
+    
+    data = []
+    if 'items' in result:
+        for item in result['items']:
+            snippet = item.get('snippet', {})
+            statistics = item.get('statistics', {})
+            data.append({
+                'Channel_Name': snippet.get('title', 'Unknown Title'),
+                'Channel_ID': item['id'],
+                'Channel_Description': snippet.get('description', 'No description available'),
+                'PlayListID': item['contentDetails'].get('relatedPlaylists', {}).get('uploads', 'Unknown Playlist'),
+                'PublishedAt': snippet.get('publishedAt', 'No YearOfPublishing'),
+                'ViewCount': statistics.get('viewCount', 0),
+                'VideoCount': statistics.get('videoCount', 0),
+                'SubscriberCount': statistics.get('subscriberCount', 0)
+            })
+    else:
+        print("No items found in the response.")
+        
+    return data
+
+# Function to connect to YouTube API
+def api_connect():
+    global youtube  # Define youtube as global
+    api_service_name = "youtube"
+    api_version = "v3"
+    api_key = "AIzaSyB6F26A1bBXkTNjLIQm8DEAQs8e6R2xbYk"  # Replace this with your actual API key
+
+    youtube = build(api_service_name, api_version, developerKey=api_key)
+
 # Streamlit app
 def main():
     # Connect to the database
-    connection = connect_to_database()
+    connection = get_db_connection()
     cursor = connection.cursor()
 
     # Streamlit layout
     st.title("YouTube Data Harvesting")
-    user_input = st.selectbox( 'Select one of the following YouTube Option',
-        ('UC8N84h1aPhwI5IT8jPh_u9Q',
-                              'UCgsyJ5oeftrhdnpUIqsfexw',
-                              'UCH86ITmgOsa8amIFhGCgcTQ',
-                              'UCOrQAdzm-lwk-Pj_e6vKQjg',
-                              'UCr1tgA4LWxttjEOR_ySEzDA',
-                              'UCrPUWWNTzeY2uJ96xUuyn0g',
-                              'UCud4Bh-uxJz1Hu4ZWo76J6Q',
-                              'UCw3rlo-az-90uz66bFgU3uw',
-                              'UCYHfntv8p9G4c5ihe2NQM2w',
-                              'UCymeXH2TJW58p5WcSeyDc3g'))
-
-    
+    user_input = st.text_input("Enter YouTube Channel_ID")
 
     if st.button("Submit"):
         if user_input:
+            channel_id = str(user_input)
+            api_connect()
+            channel_details = get_channel_details(channel_id)
+            for channel_detail in channel_details:
+                try:
+                    query = """
+                    INSERT IGNORE INTO Channel_Five (Channel_ID, Channel_Name, Channel_Description, PlayListID, ViewCount, VideoCount, SubscriberCount, PublishedAt)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """
+                    cursor.execute(query, (
+                        channel_detail['Channel_ID'], channel_detail['Channel_Name'], channel_detail['Channel_Description'],
+                        channel_detail['PlayListID'], channel_detail['ViewCount'], channel_detail['VideoCount'],
+                        channel_detail['SubscriberCount'], channel_detail['PublishedAt']
+                    ))
+                    connection.commit()
+                except mysql.connector.Error as err:
+                    print(f"Error inserting channel details: {err}")
+
             # Execute the query based on user input
-            query = f"SELECT Channel_Name, VideoCount, PlayListID, SubscriberCount FROM Channel_Five WHERE Channel_Five.Channel_ID = '{user_input}'"
+            query = f"SELECT Channel_Name, VideoCount, PlayListID, SubscriberCount FROM Channel_Five WHERE Channel_ID = '{user_input}'"
             cursor.execute(query)
             result = cursor.fetchone()  # Fetch a single row
 
@@ -51,60 +95,73 @@ def main():
             else:
                 st.write("No data found for the given Channel ID")
 
+    # Query selection
     option = st.selectbox(
-    'Select an option',
-    ('1.What are the names of all the videos and their corresponding channels?', 
-     '2.Which channels have the most number of videos, and how many videos do they have?', 
-     '3.What are the top 10 most viewed videos and their respective channels?',
-     '4.How many comments were made on each video, and what are their corresponding video names?',
-     '5.Which videos have the highest number of likes, and what are their corresponding channel names?',
-     '6.What is the total number of likes and dislikes for each video, and what are their corresponding video names?',
-     '7.What is the total number of views for each channel, and what are their corresponding channel names?',
-     '8.What are the names of all the channels that have published videos in the year 2022?',
-     '9.What is the average duration of all videos in each channel, and what are their corresponding channel names?',
-     '10.Which videos have the highest number of comments, and what are their corresponding channel names?'))
-   
-    query = ""
+        'Select one of the following questions',
+        (
+            '1. What are the names of all the videos and their corresponding channels?', 
+            '2. Which channels have the most number of videos, and how many videos do they have?', 
+            '3. What are the top 10 most viewed videos and their respective channels?',
+            '4. How many comments were made on each video, and what are their corresponding video names?',
+            '5. Which videos have the highest number of likes, and what are their corresponding channel names?',
+            '6. What is the total number of likes and dislikes for each video, and what are their corresponding video names?',
+            '7. What is the total number of views for each channel, and what are their corresponding channel names?',
+            '8. What are the names of all the channels that have published videos in the year 2022?',
+            '9. What is the average duration of all videos in each channel, and what are their corresponding channel names?',
+            '10. Which videos have the highest number of comments, and what are their corresponding channel names?'
+        )
+    )
     
+    query = ""
+    column_names = []
+
     if option.startswith('1.'):
         query = "SELECT Video_Data_One.Video_Name, Channel_Five.Channel_Name FROM Video_Data_One JOIN Channel_Five ON Video_Data_One.Channel_ID = Channel_Five.Channel_ID"
-        column_names=['Video_Name','Channel_name']
+        column_names = ['Video_Name', 'Channel_Name']
     elif option.startswith('2.'):
         query = "SELECT Channel_Name, VideoCount FROM Channel_Five ORDER BY VideoCount DESC LIMIT 5"
-        column_names=['Channel_Name','Video_Count']
+        column_names = ['Channel_Name', 'Video_Count']
     elif option.startswith('3.'):
-        query = "SELECT Video_Data_One.Video_Name, Video_Data_One.ViewCount,Channel_Five.Channel_Name  FROM Video_Data_One JOIN Channel_Five ON Video_Data_One.Channel_ID = Channel_Five.Channel_ID ORDER BY Video_Data_One.ViewCount DESC LIMIT 10"
-        column_names=['Video_Name','ViewCount','Channel_Name']
+        query = "SELECT Video_Data_One.Video_Name, Video_Data_One.ViewCount, Channel_Five.Channel_Name FROM Video_Data_One JOIN Channel_Five ON Video_Data_One.Channel_ID = Channel_Five.Channel_ID ORDER BY Video_Data_One.ViewCount DESC LIMIT 10"
+        column_names = ['Video_Name', 'ViewCount', 'Channel_Name']
     elif option.startswith('4.'):
-        query = "select Video_Name,CommentCount from Video_Data_One"
-        column_names=['Video_Name','CommentCount']
+        query = "SELECT Video_Name, CommentCount FROM Video_Data_One"
+        column_names = ['Video_Name', 'CommentCount']
     elif option.startswith('5.'):
-        query = """SELECT Video_Name, Video_Data_One.LikeCount, Channel_Five.Channel_Name 
+        query = """
+        SELECT Video_Name, Video_Data_One.LikeCount, Channel_Five.Channel_Name 
         FROM Video_Data_One JOIN Channel_Five 
         ON Video_Data_One.Channel_ID = Channel_Five.Channel_ID 
-        WHERE Video_Data_One.LikeCount = (SELECT MAX(LikeCount) FROM Video_Data_One)"""
-        column_names=['Video_Name','LikeCount','Channel_Name']
+        WHERE Video_Data_One.LikeCount = (SELECT MAX(LikeCount) FROM Video_Data_One)
+        """
+        column_names = ['Video_Name', 'LikeCount', 'Channel_Name']
     elif option.startswith('6.'):
-        query = "select Video_Name,Video_Data_One.LikeCount,Video_Data_One.DisLikeCount from Video_Data_One"
-        column_names=['Video_Name','LikeCount','DisLikeCount']
+        query = "SELECT Video_Name, Video_Data_One.LikeCount, Video_Data_One.DisLikeCount FROM Video_Data_One"
+        column_names = ['Video_Name', 'LikeCount', 'DisLikeCount']
     elif option.startswith('7.'):
-        query = "select Channel_Five.ViewCount,Channel_Name from Channel_Five"
-        column_names=['ViewCount','Channel_Name']
+        query = "SELECT Channel_Five.ViewCount, Channel_Name FROM Channel_Five"
+        column_names = ['ViewCount', 'Channel_Name']
     elif option.startswith('8.'):
-        query = "select Channel_Five.Channel_Name,Channel_Five.PublishedAt from Channel_Five where YEAR(Channel_Five.PublishedAt)=2022"
-        column_names=['Channel_Name','PublishedAt']
+        query = "SELECT Channel_Five.Channel_Name, Channel_Five.PublishedAt FROM Channel_Five WHERE YEAR(Channel_Five.PublishedAt) = 2022"
+        column_names = ['Channel_Name', 'PublishedAt']
     elif option.startswith('9.'):
-        query = '''SELECT Channel_Five.Channel_Name, AVG(Video_Data_One.Duration) AS Average_Duration_in_Seconds
-          FROM Channel_Five JOIN Video_Data_One 
-          ON Channel_Five.Channel_ID = Video_Data_One.Channel_ID GROUP BY Channel_Five.Channel_Name'''
-        column_names=['Channel_Name','Average_Duration_InSeconds']
+        query = """
+        SELECT Channel_Five.Channel_Name, AVG(Video_Data_One.Duration) AS Average_Duration_in_Seconds
+        FROM Channel_Five JOIN Video_Data_One 
+        ON Channel_Five.Channel_ID = Video_Data_One.Channel_ID 
+        GROUP BY Channel_Five.Channel_Name
+        """
+        column_names = ['Channel_Name', 'Average_Duration_in_Seconds']
     elif option.startswith('10.'):
-        query = "select Video_Data_One.Video_Name, Video_Data_One.CommentCount, Channel_Five.Channel_Name from Channel_Five JOIN Video_Data_One ON Video_Data_One.Channel_ID = Channel_Five.Channel_ID Where Video_Data_One.CommentCount=(select MAX(CommentCount) from Video_Data_One)"
-        column_names=['Video_Name','Comment_Count','Channel_Name']
-    else:
-        st.write("Select the query from the DropDown Menu")
+        query = """
+        SELECT Video_Data_One.Video_Name, Video_Data_One.CommentCount, Channel_Five.Channel_Name 
+        FROM Channel_Five JOIN Video_Data_One 
+        ON Video_Data_One.Channel_ID = Channel_Five.Channel_ID 
+        WHERE Video_Data_One.CommentCount = (SELECT MAX(CommentCount) FROM Video_Data_One)
+        """
+        column_names = ['Video_Name', 'Comment_Count', 'Channel_Name']
     
-    if st.button("Execute the Query"): 
+    if st.button("Execute the Query"):
         if query:  # Check if query is not empty
             cursor.execute(query)
             result = cursor.fetchall()
@@ -118,12 +175,10 @@ def main():
             st.write(df)
         else:
             st.write("No data found for the selected query")
-    else:
-        st.write("No query selected")
 
     # Close the cursor and connection
     cursor.close()
-    connection.close()  
+    connection.close()
 
 if __name__ == "__main__":
     main()
