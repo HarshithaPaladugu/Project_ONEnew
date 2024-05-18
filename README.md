@@ -1,5 +1,5 @@
 # Project_ONEnew
-FinalTABLES.py file contains code to create the table
+FinalTABLES_New.py file contains code to create amd insert the data in to the channel table. And fetch the data related to video and comments.
 video_data_one table:
 
 Database Connection: The code establishes a connection to a MySQL database named 'YoutubeDataHarvesting' running on the localhost using the credentials provided.
@@ -27,6 +27,7 @@ Fetch Channel Details: For each channel ID, it establishes a connection to the Y
 Insert Channel Details into Database: It then inserts the channel details into the 'Channel_Five' table in the database using an INSERT IGNORE query to avoid inserting duplicate entries.
 Fetch Data from Database: After inserting the data, it fetches all data from the 'Channel_Five' table in the database and converts it into a Pandas DataFrame for easy visualization and verification.
 Display Data: Finally, it prints the DataFrame containing the fetched channel details.
+Similarly the data related to videos and comments are fetched from the database. 
 
 FINALApp.py:
 
