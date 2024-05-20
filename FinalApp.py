@@ -48,7 +48,7 @@ def api_connect():
     global youtube  # Define youtube as global
     api_service_name = "youtube"
     api_version = "v3"
-    api_key = "AIzaSyB6F26A1bBXkTNjLIQm8DEAQs8e6R2xbYk"  # Replace this with your actual API key
+    api_key = "Your_API_Key"  # Replace this with your actual API key
 
     youtube = build(api_service_name, api_version, developerKey=api_key)
 
