@@ -1,62 +1,160 @@
 # Project_ONEnew
-FinalTABLES_New.py file contains code to create amd insert the data in to the channel table. And fetch the data related to video and comments.
-video_data_one table:
 
-Database Connection: The code establishes a connection to a MySQL database named 'YoutubeDataHarvesting' running on the localhost using the credentials provided.
-Function Definitions:
-get_all_video_ids(c_id): This function retrieves all video IDs associated with a given channel ID using the YouTube Data API. It iterates through the playlist items of the channel's 'uploads' playlist to collect the video IDs.
-get_video_details(v_id): This function retrieves details of a specific video given its video ID using the YouTube Data API. It gathers information such as video name, channel ID, duration, view count, like count, dislike count, and comment count.
-Table Creation: The code checks if a table named 'Video_Data_One' exists in the database. If not, it creates the table with columns for storing video details.
-Data Retrieval and Update:
-For each channel ID in the channel_ids list, the code retrieves all video IDs associated with that channel using get_all_video_ids(c_id).
-For each video ID obtained, it retrieves video details using get_video_details(v_id).
-It then checks if each video already exists in the database based on its name.
-If the video exists, it updates its data in the database. If not, it inserts a new entry.
-Finally, it commits the changes to the database.
-Data Retrieval for Verification: After updating the database, the code fetches all data from the 'Video_Data_One' table and displays it as a Pandas DataFrame for verification.
-Channel_Five table:
+### Workflow:
 
-Global YouTube Object: A global youtube object is defined to hold the YouTube Data API instance.
-Database Connection: The code establishes a connection to a MySQL database named 'YoutubeDataHarvesting' running on the localhost using the provided credentials.
-API Connection Function: The api_connect() function initializes the global youtube object by building a connection to the YouTube Data API using the developer key.
-Function to Get Channel Details: The get_channel_details(channel_id) function takes a channel ID as input and retrieves details about the channel using the YouTube Data API. It extracts information such as the channel name, description, playlist ID, view count, video count, subscriber count, and publishing date.
-Table Creation: The code checks if a table named 'Channel_Five' exists in the database. If not, it creates the table with columns to store channel details.
-Define Channel IDs: A list of channel IDs is defined to specify the channels for which details need to be fetched.
-Iterate Through Channel IDs: The code iterates through each channel ID in the channel_ids list.
-Fetch Channel Details: For each channel ID, it establishes a connection to the YouTube Data API, fetches the channel details using get_channel_details(channel_id), and stores them in the channel_details variable.
-Insert Channel Details into Database: It then inserts the channel details into the 'Channel_Five' table in the database using an INSERT IGNORE query to avoid inserting duplicate entries.
-Fetch Data from Database: After inserting the data, it fetches all data from the 'Channel_Five' table in the database and converts it into a Pandas DataFrame for easy visualization and verification.
-Display Data: Finally, it prints the DataFrame containing the fetched channel details.
-Similarly the data related to videos and comments are fetched from the database. 
+1. **Setup Database Connection**:
+    - Establish a connection to the MySQL database using the provided credentials.
+    - Ensure the database `YoutubeDataHarvesting` and the table `comment_data_two` exist.
 
-FINALApp.py:
+2. **Retrieve Video IDs**:
+    - Use the YouTube Data API to get the list of video IDs from the specified channels.
 
-This Streamlit app interacts with a MySQL database and the YouTube Data API to perform various queries and display the results based on user input. Here's the flow of execution:
+3. **Fetch Comments for Each Video**:
+    - For each video ID, check if comments are enabled.
+    - Retrieve comments for each video and format the necessary details.
 
-Database Connection Function: The connect_to_database() function establishes a connection to the MySQL database.
-Streamlit App Setup: The main() function initializes the Streamlit app, sets the app title, and provides a select box for the user to choose from a list of channel IDs.
-Fetching Channel Information: When the user clicks the "Submit" button, the app executes a query to fetch channel information based on the selected channel ID. If data is found, it creates a DataFrame and displays the channel information.
-Selecting Query Option: The app provides a dropdown menu for the user to select different query options. Each option corresponds to a specific query to be executed.
-Executing Query: When the user clicks the "Execute the Query" button, the selected query is executed, and the result is displayed in a DataFrame.
-Query Execution: Based on the selected query option, the app executes the corresponding SQL query. If the query involves fetching data from the database, it fetches the result and displays it. If the query requires interaction with the YouTube Data API, it executes the appropriate API call and displays the result.
-Displaying Result: The result of the executed query is displayed in a DataFrame format within the Streamlit app.
-Closing Connection: After the user finishes interacting with the app, the database cursor and connection are closed to release resources.
-The Output of the following queries are displayed in the streamlit app upon selection of the query to be executed from the dropdown menu.
-1. What are the names of all the videos and their corresponding channels?
-2. Which channels have the most number of videos, and how many videos do
-they have?
-3. What are the top 10 most viewed videos and their respective channels?
-4. How many comments were made on each video, and what are their
-corresponding video names?
-5. Which videos have the highest number of likes, and what are their
-corresponding channel names?
-6. What is the total number of likes and dislikes for each video, and what are
-their corresponding video names?
-7. What is the total number of views for each channel, and what are their
-corresponding channel names?
-8. What are the names of all the channels that have published videos in the year
-2022?
-9. What is the average duration of all videos in each channel, and what are their
-corresponding channel names?
-10.Which videos have the highest number of comments, and what are their
-corresponding channel names?
+4. **Store Comments in the Database**:
+    - Insert the fetched comments into the MySQL table `comment_data_two`.
+
+5. **Error Handling**:
+    - Include error handling for network issues, API limits, and data inconsistencies.
+
+### Detailed Steps:
+
+1. **Setup MySQL Database Connection**:
+
+```python
+import mysql.connector
+import googleapiclient.discovery
+import re
+
+# Connect to MySQL database
+client = mysql.connector.connect(
+    host='localhost',
+    user='root',
+    password='1611',
+    database='YoutubeDataHarvesting'
+)
+
+cursor = client.cursor()
+
+# Create table if it doesn't exist
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS comment_data_two (
+    commentID VARCHAR(255) PRIMARY KEY,
+    videoID VARCHAR(255),
+    textdisplay TEXT,
+    authordisplayname VARCHAR(255),
+    publishedAt DATETIME
+)
+""")
+```
+
+2. **Fetch Video IDs from YouTube Channel**:
+
+```python
+def get_all_video_ids(c_id):
+    youtube = googleapiclient.discovery.build("youtube", "v3", developerKey="YOUR_API_KEY")
+    request = youtube.channels().list(
+        part="contentDetails",
+        id=c_id
+    )
+    try:
+        response = request.execute()
+        playlist_id = response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+
+        video_ids = []
+        next_page_token = None
+        while True:
+            playlist_items_request = youtube.playlistItems().list(
+                part="snippet",
+                playlistId=playlist_id,
+                pageToken=next_page_token
+            )
+            playlist_items_response = playlist_items_request.execute()
+
+            for item in playlist_items_response.get("items", []):
+                video_ids.append(item["snippet"]["resourceId"]["videoId"])
+
+            next_page_token = playlist_items_response.get("nextPageToken")
+            if not next_page_token:
+                break
+
+        return video_ids
+    except KeyError as e:
+        print(f"KeyError: {e}")
+        return []
+    except Exception as e:
+        print(f"Error fetching video IDs for channel {c_id}: {e}")
+        return []
+```
+
+3. **Fetch Comments for Each Video**:
+
+```python
+def get_comments(video_ids, api_key, max_comments=100):
+    youtube = googleapiclient.discovery.build("youtube", "v3", developerKey=api_key)
+    comments = []
+
+    for video_id in video_ids:
+        try:
+            # Check if comments are disabled for the video
+            video_request = youtube.videos().list(
+                part="snippet,statistics",
+                id=video_id
+            )
+            video_response = video_request.execute()
+            comment_count = int(video_response["items"][0]["statistics"]["commentCount"])
+            if comment_count == 0:
+                print(f"Comments are disabled for the video: {video_id}")
+                continue
+
+            request = youtube.commentThreads().list(
+                part="snippet",
+                videoId=video_id,
+                maxResults=max_comments
+            )
+            response = request.execute()
+
+            for item in response["items"]:
+                comment_info = {
+                    "commentID": item["snippet"]["topLevelComment"]["id"],
+                    "videoID": video_id,
+                    "textdisplay": item["snippet"]["topLevelComment"]["snippet"]["textDisplay"],
+                    "authordisplayname": item["snippet"]["topLevelComment"]["snippet"]["authorDisplayName"],
+                    "publishedAt": re.sub(r'(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})Z', r'\1 \2', item["snippet"]["topLevelComment"]["snippet"]["publishedAt"])
+                }
+
+                # Insert comment into MySQL table
+                insert_query = "INSERT INTO comment_data_two (commentID, videoID, textdisplay, authordisplayname, publishedAt) VALUES (%s, %s, %s, %s, %s)"
+                insert_values = (comment_info["commentID"], comment_info["videoID"], comment_info["textdisplay"], comment_info["authordisplayname"], comment_info["publishedAt"])
+                cursor.execute(insert_query, insert_values)
+                client.commit()
+
+                comments.append(comment_info)
+
+        except Exception as e:
+            print(f"Error fetching comments for {video_id}: {e}")
+
+    return comments
+```
+
+4. **Main Execution Loop**:
+
+```python
+channel_ids = ['UCJl5FQGoF1PRivoGecGJNuA', 'UCOrQAdzm-lwk-Pj_e6vKQjg', 'UCymeXH2TJW58p5WcSeyDc3g', 'UCr1tgA4LWxttjEOR_ySEzDA', 'UCgsyJ5oeftrhdnpUIqsfexw', 'UCH86ITmgOsa8amIFhGCgcTQ', 'UCYHfntv8p9G4c5ihe2NQM2w', 'UCrPUWWNTzeY2uJ96xUuyn0g', 'UCud4Bh-uxJz1Hu4ZWo76J6Q', 'UC8N84h1aPhwI5IT8jPh_u9Q']
+
+for c_id in channel_ids:
+    video_ids = get_all_video_ids(c_id)
+    api_key = "YOUR_API_KEY"
+    comments_details = get_comments(video_ids, api_key)
+    print(comments_details)
+```
+
+### Notes:
+
+- **API Key**: Replace `"YOUR_API_KEY"` with your actual YouTube API key.
+- **Database Credentials**: Ensure the database credentials (host, user, password) are correct.
+- **Error Handling**: Add more specific error handling as needed for production.
+
+This structure ensures that the code is modular, easy to maintain, and ready for execution. Let me know if you need any further help!
