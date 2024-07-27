@@ -1,4 +1,5 @@
 # Project_ONEnew
+FinalTABLES_New.ipynb:
 
 ### Workflow:
 
@@ -557,3 +558,273 @@ client.close()
 ### Notes:
 - Replace `"YOUR_API_KEY"` with your actual YouTube API key.
 - Ensure the MySQL database credentials (host, user, password, database) are correct.
+
+FinalApp.py:
+
+### 1. Import Libraries
+```python
+import streamlit as st
+import mysql.connector
+import pandas as pd
+from googleapiclient.discovery import build
+```
+- **Purpose**: Import necessary libraries for the application:
+  - `streamlit` for creating the web app.
+  - `mysql.connector` for database connection.
+  - `pandas` for data manipulation and display.
+  - `googleapiclient.discovery` for YouTube API access.
+
+### 2. Initialize YouTube API Connection
+```python
+youtube = None
+```
+- **Purpose**: Declare a global variable `youtube` to hold the API connection.
+
+### 3. Function to Establish a Database Connection
+```python
+def get_db_connection():
+    return mysql.connector.connect(
+        host='localhost',
+        user='root',
+        password='1611',
+        database='YoutubeDataHarvesting'
+    )
+```
+- **Purpose**: Define a function to connect to a MySQL database with specified credentials and database name.
+
+### 4. Function to Get Channel Details from YouTube API
+```python
+def get_channel_details(channel_id):
+    request = youtube.channels().list(
+        part="snippet,contentDetails,statistics",
+        id=channel_id
+    )
+    result = request.execute()
+    
+    data = []
+    if 'items' in result:
+        for item in result['items']:
+            snippet = item.get('snippet', {})
+            statistics = item.get('statistics', {})
+            data.append({
+                'Channel_Name': snippet.get('title', 'Unknown Title'),
+                'Channel_ID': item['id'],
+                'Channel_Description': snippet.get('description', 'No description available'),
+                'PlayListID': item['contentDetails'].get('relatedPlaylists', {}).get('uploads', 'Unknown Playlist'),
+                'PublishedAt': snippet.get('publishedAt', 'No YearOfPublishing'),
+                'ViewCount': statistics.get('viewCount', 0),
+                'VideoCount': statistics.get('videoCount', 0),
+                'SubscriberCount': statistics.get('subscriberCount', 0)
+            })
+    else:
+        print("No items found in the response.")
+        
+    return data
+```
+- **Purpose**: Define a function to retrieve and format channel details from the YouTube API for a given channel ID.
+
+### 5. Function to Connect to YouTube API
+```python
+def api_connect():
+    global youtube  # Define youtube as global
+    api_service_name = "youtube"
+    api_version = "v3"
+    api_key = "Your_API_Key"  # Replace this with your actual API key
+
+    youtube = build(api_service_name, api_version, developerKey=api_key)
+```
+- **Purpose**: Define a function to initialize the YouTube API client using the provided API key and set the global `youtube` variable.
+
+### 6. Streamlit App Main Function
+```python
+def main():
+    # Custom CSS for background and styles
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            background-image: url('https://www.caspio.com/wp-content/uploads/blog/what-you-need-to-know-about-data-harvesting-and-how-to-prevent-it.jpg');
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }
+        .stApp * {
+            color: black;  /* Change text color to black */
+            font-size: 30px; /* Increase font size to 30px */
+            font-weight: bold; /* Make text bold */
+        }
+        .stButton>button {
+            background-color: skyblue; /* Change button color to sky blue */
+            color: black; /* Change button text color to black */
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    # Connect to the database
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    # Streamlit layout
+    st.title("YouTube Data Harvesting")
+    user_input = st.text_input("Enter YouTube Channel_ID")
+
+    if st.button("Submit"):
+        if user_input:
+            channel_id = str(user_input)
+            api_connect()
+            channel_details = get_channel_details(channel_id)
+            for channel_detail in channel_details:
+                try:
+                    query = """
+                    INSERT IGNORE INTO Channel_Five (Channel_ID, Channel_Name, Channel_Description, PlayListID, ViewCount, VideoCount, SubscriberCount, PublishedAt)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """
+                    cursor.execute(query, (
+                        channel_detail['Channel_ID'], channel_detail['Channel_Name'], channel_detail['Channel_Description'],
+                        channel_detail['PlayListID'], channel_detail['ViewCount'], channel_detail['VideoCount'],
+                        channel_detail['SubscriberCount'], channel_detail['PublishedAt']
+                    ))
+                    connection.commit()
+                except mysql.connector.Error as err:
+                    print(f"Error inserting channel details: {err}")
+
+            # Execute the query based on user input
+            query = f"SELECT Channel_Name, VideoCount, PlayListID, SubscriberCount FROM Channel_Five WHERE Channel_ID = '{user_input}'"
+            cursor.execute(query)
+            result = cursor.fetchone()  # Fetch a single row
+
+            if result:
+                # Create DataFrame from the fetched row
+                df = pd.DataFrame([result], columns=['Channel_Name', 'VideoCount', 'PlayListID', 'SubscriberCount'])
+                st.write("Channel Information:")
+                st.write(df)
+            else:
+                st.write("No data found for the given Channel ID")
+
+    # Query selection
+    option = st.selectbox(
+        'Select one of the following questions',
+        (
+            '1. What are the names of all the videos and their corresponding channels?', 
+            '2. Which channels have the most number of videos, and how many videos do they have?', 
+            '3. What are the top 10 most viewed videos and their respective channels?',
+            '4. How many comments were made on each video, and what are their corresponding video names?',
+            '5. Which videos have the highest number of likes, and what are their corresponding channel names?',
+            '6. What is the total number of likes and dislikes for each video, and what are their corresponding video names?',
+            '7. What is the total number of views for each channel, and what are their corresponding channel names?',
+            '8. What are the names of all the channels that have published videos in the year 2022?',
+            '9. What is the average duration of all videos in each channel, and what are their corresponding channel names?',
+            '10. Which videos have the highest number of comments, and what are their corresponding channel names?'
+        )
+    )
+    
+    query = ""
+    column_names = []
+
+    if option.startswith('1.'):
+        query = "SELECT Video_Data_One.Video_Name, Channel_Five.Channel_Name FROM Video_Data_One JOIN Channel_Five ON Video_Data_One.Channel_ID = Channel_Five.Channel_ID"
+        column_names = ['Video_Name', 'Channel_Name']
+    elif option.startswith('2.'):
+        query = "SELECT Channel_Name, VideoCount FROM Channel_Five ORDER BY VideoCount DESC LIMIT 5"
+        column_names = ['Channel_Name', 'Video_Count']
+    elif option.startswith('3.'):
+        query = "SELECT Video_Data_One.Video_Name, Video_Data_One.ViewCount, Channel_Five.Channel_Name FROM Video_Data_One JOIN Channel_Five ON Video_Data_One.Channel_ID = Channel_Five.Channel_ID ORDER BY Video_Data_One.ViewCount DESC LIMIT 10"
+        column_names = ['Video_Name', 'ViewCount', 'Channel_Name']
+    elif option.startswith('4.'):
+        query = "SELECT Video_Name, CommentCount FROM Video_Data_One"
+        column_names = ['Video_Name', 'CommentCount']
+    elif option.startswith('5.'):
+        query = """
+        SELECT Video_Name, Video_Data_One.LikeCount, Channel_Five.Channel_Name 
+        FROM Video_Data_One JOIN Channel_Five 
+        ON Video_Data_One.Channel_ID = Channel_Five.Channel_ID 
+        WHERE Video_Data_One.LikeCount = (SELECT MAX(LikeCount) FROM Video_Data_One)
+        """
+        column_names = ['Video_Name', 'LikeCount', 'Channel_Name']
+    elif option.startswith('6.'):
+        query = "SELECT Video_Name, Video_Data_One.LikeCount, Video_Data_One.DisLikeCount FROM Video_Data_One"
+        column_names = ['Video_Name', 'LikeCount', 'DisLikeCount']
+    elif option.startswith('7.'):
+        query = "SELECT Channel_Five.ViewCount, Channel_Name FROM Channel_Five"
+        column_names = ['ViewCount', 'Channel_Name']
+    elif option.startswith('8.'):
+        query = "SELECT Channel_Five.Channel_Name, Channel_Five.PublishedAt FROM Channel_Five WHERE YEAR(Channel_Five.PublishedAt) = 2022"
+        column_names = ['Channel_Name', 'PublishedAt']
+    elif option.startswith('9.'):
+        query = """
+        SELECT Channel_Five.Channel_Name, AVG(Video_Data_One.Duration) AS Average_Duration_in_Seconds
+        FROM Channel_Five JOIN Video_Data_One 
+        ON Channel_Five.Channel_ID = Video_Data_One.Channel_ID 
+        GROUP BY Channel_Five.Channel_Name
+        """
+        column_names = ['Channel_Name', 'Average_Duration_in_Seconds']
+    elif option.startswith('10.'):
+        query = """
+        SELECT Video_Data_One.Video_Name, Video_Data_One.CommentCount, Channel_Five.Channel_Name 
+        FROM Channel_Five JOIN Video_Data_One 
+        ON Video_Data_One
+
+.Channel_ID = Channel_Five.Channel_ID 
+        WHERE Video_Data_One.CommentCount = (SELECT MAX(CommentCount) FROM Video_Data_One)
+        """
+        column_names = ['Video_Name', 'Comment_Count', 'Channel_Name']
+    
+    if st.button("Execute the Query"):
+        if query:  # Check if query is not empty
+            cursor.execute(query)
+            result = cursor.fetchall()
+        else:
+            result = None  # Initialize result with None if query is empty
+
+        # Display the result
+        if result:
+            df = pd.DataFrame(result, columns=column_names)
+            st.write("Query Result:")
+            st.write(df)
+        else:
+            st.write("No data found for the selected query")
+
+    # Close the cursor and connection
+    cursor.close()
+    connection.close()
+
+if __name__ == "__main__":
+    main()
+```
+- **Purpose**: Main function to run the Streamlit app. The workflow within the main function includes:
+  - Customizing the app's appearance with CSS.
+  - Establishing a database connection.
+  - Displaying the app's title.
+  - Accepting user input for a YouTube Channel ID.
+  - Handling the "Submit" button to fetch and store channel details.
+  - Providing a select box for predefined queries.
+  - Executing the selected query and displaying the results.
+  - Closing the database connection.
+
+### Execution Workflow
+
+1. **Initialize the App**:
+   - Load the app and apply custom CSS for styling.
+
+2. **Database Connection**:
+   - Establish a connection to the MySQL database.
+
+3. **User Input**:
+   - Accept a YouTube Channel ID from the user.
+   - When the "Submit" button is clicked, connect to the YouTube API, fetch channel details, and insert them into the database.
+
+4. **Query Execution**:
+   - Provide a select box with predefined queries.
+   - When the "Execute the Query" button is clicked, execute the selected query and display the results in a DataFrame.
+
+5. **Close Connections**:
+   - Close the database cursor and connection at the end of the app.
+
+### Error Handling
+
+- **Database Connection Errors**: If there's an issue connecting to the database, it will raise an error during the `get_db_connection` function execution.
+- **YouTube API Errors**: Errors in fetching data from the YouTube API will be caught and printed.
+- **Data Insertion Errors**: Errors during data insertion into the database will be caught and printed.
+- **Query Execution Errors**: If the query execution fails, the app will display a message indicating no data found.
